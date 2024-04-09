@@ -24,6 +24,10 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=log
 8:留出一部分数据做测试用
 9:把尺寸减少，同时每个subject只计算mask相关的slice
 10:看一下batch size的问题
+11:修改sample部分
+12:编写数据增强的代码，随机采样，看大小/位置对结果的影响
+13:跑通评价指标代码
+14:每100个epoch sample一次所有数据
 """
 
 class Diffusion:
@@ -109,23 +113,24 @@ def inpaint_image(original_image, generated_image, mask):
 
 def train_each_subject(images, device, diffusion, model, mse, optimizer, ema, pbar, ema_model, labels, masks):
     print(images.shape)
-    b, h, w, len = images.shape
+    b, c, l, w, h = images.shape
     # labels = mask
 
     images_predict = torch.zeros_like(labels)
     noise_predict = torch.zeros_like(labels)
     loss = 0
     for slice in range(50):
-        print(slice)
-        images_slice = images[:,:,:,slice]
-        labels_slice = labels[:,:,:,slice]
+        print(slice) #size 应该是 b, c, 240, 240
+        images_slice = images[:,:,:,:,slice]
+        labels_slice = labels[:,:,:,:,slice]
         #去掉一个维度
-        images_slice = images_slice.unsqueeze(0)
-        labels_slice = labels_slice.unsqueeze(0)
+        images_slice = images_slice.squeeze(-1)
+        labels_slice = labels_slice.squeeze(-1)
         images_slice = images_slice.to(device)
         labels_slice = labels_slice.to(device)
         images_slice = images_slice.to(torch.float)
         labels_slice = labels_slice.to(torch.float)
+        print('input shape', images_slice.shape)
 
 
         t = diffusion.sample_timesteps(images_slice.shape[0]).to(device)
@@ -133,10 +138,10 @@ def train_each_subject(images, device, diffusion, model, mse, optimizer, ema, pb
         # if np.random.random() < 0.1: #这两行是做什么的
         #     labels = None
         predicted_noise = model(x_t, t, labels_slice)
-        images_predict[:,:,:,slice] = predicted_noise
-        noise_predict[:,:,:,slice] = noise
-        images_predict_slice = inpaint_image(images[:,:,:,slice], images_predict[:,:,:,slice], masks[:,:,:,slice])
-        noise_predict_slice = inpaint_image(images[:,:,:,slice], noise_predict[:,:,:,slice], masks[:,:,:,slice])
+        images_predict[:,:,:,:,slice] = predicted_noise
+        noise_predict[:,:,:,:,slice] = noise
+        images_predict_slice = inpaint_image(images[:,:,:,:,slice], images_predict[:,:,:,:,slice], masks[:,:,:,:,slice])
+        noise_predict_slice = inpaint_image(images[:,:,:,:,slice], noise_predict[:,:,:,:,slice], masks[:,:,:,:,slice])
         loss = loss + mse(noise_predict_slice, images_predict_slice)
 
     optimizer.zero_grad()
@@ -163,6 +168,7 @@ def train(args):
         logging.info(f"Starting epoch {epoch}:")
         pbar = tqdm(dataloader)
         for i, (images, cropped_images, masks, _) in enumerate(pbar):
+            print(images.shape)
             images = images.to(device)
             labels = cropped_images.to(device)
             # t = diffusion.sample_timesteps(images.shape[0]).to(device)
@@ -207,7 +213,7 @@ def launch():
     args = parser.parse_args()
     args.run_name = "DDPM_conditional"
     args.epochs = 300
-    args.batch_size = 1
+    args.batch_size = 4
     args.image_size = 64
     args.dataset_path =  r"D:\BraTS\ASNR_test"
     args.device = "cuda"

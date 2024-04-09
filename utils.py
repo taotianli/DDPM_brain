@@ -54,6 +54,10 @@ class BrainTumorDataset(Dataset):
         cropped_image = image.copy()
         cropped_image[mask_bool] = 0
 
+        image = image[np.newaxis, ...]
+        cropped_image = cropped_image[np.newaxis, ...]
+        mask = mask[np.newaxis, ...]
+
 
         return image, cropped_image, mask, mask_affine
 
