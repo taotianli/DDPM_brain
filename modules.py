@@ -153,7 +153,8 @@ class ImageEncoder(nn.Module):
         self.conv1 = DoubleConv(c_in, 64)
         self.conv2 = DoubleConv(64, c_out)
         self.pool = nn.MaxPool2d(2, 2)
-        self.fc1 = nn.Linear(c_out * 60 * 60, 1024)
+        # self.fc1 = nn.Linear(c_out * 60 * 60, 1024)
+        self.fc1 = nn.Linear(c_out * 32 * 32, 1024)
         self.fc2 = nn.Linear(1024, time_dim)
 
     def forward(self, x):
@@ -161,7 +162,8 @@ class ImageEncoder(nn.Module):
         x = self.pool(x)# 1,1,120,120
         x = F.relu(self.conv2(x))
         x = self.pool(x)# 1,1,60,60
-        x = x.view(-1, 60 *60)
+        # x = x.view(-1, 60 *60)
+        x = x.view(-1, 32 * 32)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         # print('final emb shape',x.shape)
@@ -174,22 +176,32 @@ class UNet_conditional(nn.Module):
         self.time_dim = time_dim
         self.inc = DoubleConv(c_in, 64)
         self.down1 = Down(64, 128)
-        self.sa1 = SelfAttention(128, 120)
+        # self.sa1 = SelfAttention(128, 120)
+        # self.down2 = Down(128, 256)
+        # self.sa2 = SelfAttention(256, 60)
+        # self.down3 = Down(256, 256)
+        # self.sa3 = SelfAttention(256, 30)
+        self.sa1 = SelfAttention(128, 64)
         self.down2 = Down(128, 256)
-        self.sa2 = SelfAttention(256, 60)
+        self.sa2 = SelfAttention(256, 32)
         self.down3 = Down(256, 256)
-        self.sa3 = SelfAttention(256, 30)
+        self.sa3 = SelfAttention(256, 16)
 
         self.bot1 = DoubleConv(256, 512)
         self.bot2 = DoubleConv(512, 512)
         self.bot3 = DoubleConv(512, 256)
 
         self.up1 = Up(512, 128)
-        self.sa4 = SelfAttention(128, 60)
+        # self.sa4 = SelfAttention(128, 60)
+        # self.up2 = Up(256, 64)
+        # self.sa5 = SelfAttention(64, 120)
+        # self.up3 = Up(128, 64)
+        # self.sa6 = SelfAttention(64, 240)
+        self.sa4 = SelfAttention(128, 32)
         self.up2 = Up(256, 64)
-        self.sa5 = SelfAttention(64, 120)
+        self.sa5 = SelfAttention(64, 64)
         self.up3 = Up(128, 64)
-        self.sa6 = SelfAttention(64, 240)
+        self.sa6 = SelfAttention(64, 128)
         self.outc = nn.Conv2d(64, c_out, kernel_size=1)
 
         self.image_encoder = ImageEncoder(c_in, c_out, self.time_dim)

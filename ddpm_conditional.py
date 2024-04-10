@@ -21,17 +21,21 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=log
 5:改进guidance的方式(corss attention)
 6:最后拼接成一个3D图像
 7:加上实际的评价指标
-8:留出一部分数据做测试用
-9:把尺寸减少，同时每个subject只计算mask相关的slice
+8:留出一部分数据做测试用，修改一下dataloader
+9:把尺寸减少，同时每个subject只计算mask相关的slice 128,128,96
 10:看一下batch size的问题
 11:修改sample部分
 12:编写数据增强的代码，随机采样，看大小/位置对结果的影响
 13:跑通评价指标代码
 14:每100个epoch sample一次所有数据
+15:使用相邻slice做guidance
+16:切成3Dpatch进行训练
+17:每个patch/部位都有一个position encoding，
+18:服务器上配一个环境，挂服务器上跑
 """
 
 class Diffusion:
-    def __init__(self, noise_steps=1000, beta_start=1e-4, beta_end=0.02, img_size=256, device="cuda"):
+    def __init__(self, noise_steps=1000, beta_start=1e-4, beta_end=0.02, img_size=240, device="cuda"):
         self.noise_steps = noise_steps
         self.beta_start = beta_start
         self.beta_end = beta_end
@@ -112,15 +116,15 @@ def inpaint_image(original_image, generated_image, mask):
 # print(output_image.shape)  # 输出合成后的图像尺寸
 
 def train_each_subject(images, device, diffusion, model, mse, optimizer, ema, pbar, ema_model, labels, masks):
-    print(images.shape)
+    # print(images.shape)
     b, c, l, w, h = images.shape
     # labels = mask
 
     images_predict = torch.zeros_like(labels)
     noise_predict = torch.zeros_like(labels)
     loss = 0
-    for slice in range(50):
-        print(slice) #size 应该是 b, c, 240, 240
+    for slice in range(96):
+        # print(slice) #size 应该是 b, c, 240, 240
         images_slice = images[:,:,:,:,slice]
         labels_slice = labels[:,:,:,:,slice]
         #去掉一个维度
@@ -130,7 +134,7 @@ def train_each_subject(images, device, diffusion, model, mse, optimizer, ema, pb
         labels_slice = labels_slice.to(device)
         images_slice = images_slice.to(torch.float)
         labels_slice = labels_slice.to(torch.float)
-        print('input shape', images_slice.shape)
+        # print('input shape', images_slice.shape)
 
 
         t = diffusion.sample_timesteps(images_slice.shape[0]).to(device)
@@ -168,7 +172,7 @@ def train(args):
         logging.info(f"Starting epoch {epoch}:")
         pbar = tqdm(dataloader)
         for i, (images, cropped_images, masks, _) in enumerate(pbar):
-            print(images.shape)
+            # print(images.shape)
             images = images.to(device)
             labels = cropped_images.to(device)
             # t = diffusion.sample_timesteps(images.shape[0]).to(device)
@@ -195,16 +199,16 @@ def train(args):
             pbar.set_postfix(MSE=loss.item())
             logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
-        # if epoch % 10 == 0:
+        if epoch % 10 == 0:
         #     labels = torch.arange(10).long().to(device)
         #     sampled_images = diffusion.sample(model, n=len(labels), labels=labels)
         #     ema_sampled_images = diffusion.sample(ema_model, n=len(labels), labels=labels)
         #     # plot_images(sampled_images)
         #     save_images(sampled_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
         #     save_images(ema_sampled_images, os.path.join("results", args.run_name, f"{epoch}_ema.jpg"))
-        #     torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
-        #     torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"ema_ckpt.pt"))
-        #     torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim.pt"))
+            torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
+            torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"ema_ckpt.pt"))
+            torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim.pt"))
 
 
 def launch():
@@ -212,10 +216,10 @@ def launch():
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
     args.run_name = "DDPM_conditional"
-    args.epochs = 300
-    args.batch_size = 4
-    args.image_size = 64
-    args.dataset_path =  r"D:\BraTS\ASNR_test"
+    args.epochs = 500
+    args.batch_size = 2
+    args.image_size = 128
+    args.dataset_path =  r"/hpc/data/home/bme/yubw/taotl/BraTS-2023_challenge/ASNR-MICCAI-BraTS2023-Local-Synthesis-Challenge-Training"
     args.device = "cuda"
     args.lr = 3e-4
     train(args)

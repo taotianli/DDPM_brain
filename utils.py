@@ -35,31 +35,43 @@ class BrainTumorDataset(Dataset):
     def __getitem__(self, idx):
         subject_dir = self.subject_dirs[idx]
         image_path = glob.glob(os.path.join(subject_dir, '*t1n.nii.gz'))[0]
-        mask_path = glob.glob(os.path.join(subject_dir, '*seg.nii.gz'))[0]
+        cropped_image_path = glob.glob(os.path.join(subject_dir, '*t1n-voided.nii.gz'))[0]
+        healthy_mask_path = glob.glob(os.path.join(subject_dir, '*healthy.nii.gz'))[0]
+        unhealthy_mask_path = glob.glob(os.path.join(subject_dir, '*unhealthy.nii.gz'))[0]
+
 
         # 加载图像和掩膜
         image = nib.load(image_path).get_fdata()
-        mask = nib.load(mask_path).get_fdata()
-        mask_affine = nib.load(mask_path).affine
-        image = np.pad(image, ((0, 0), (0, 0), (3, 2)), mode='constant')
-        mask = np.pad(mask, ((0, 0), (0, 0), (3, 2)), mode='constant')
+        healthy_mask = nib.load(healthy_mask_path).get_fdata()
+        unhealthy_mask = nib.load(unhealthy_mask_path).get_fdata()
+        cropped_image = nib.load(cropped_image_path).get_fdata()
+        mask_affine = nib.load(healthy_mask_path).affine
+        # image = np.pad(image, ((0, 0), (0, 0), (3, 2)), mode='constant')
+        # healthy_mask = np.pad(healthy_mask, ((0, 0), (0, 0), (3, 2)), mode='constant')
+        # cropped_image = np.pad(cropped_image, ((0, 0), (0, 0), (3, 2)), mode='constant')
+        # unhealthy_mask = np.pad(unhealthy_mask, ((0, 0), (0, 0), (3, 2)), mode='constant')
+        center_x, center_y, center_z = image.shape[0] // 2, image.shape[1] // 2, image.shape[2] // 2
+        image = image[center_x-64:center_x+64, center_y-64:center_y+64, center_z-48:center_z+48]
+        healthy_mask = healthy_mask[center_x-64:center_x+64, center_y-64:center_y+64, center_z-48:center_z+48]
+        cropped_image = cropped_image[center_x-64:center_x+64, center_y-64:center_y+64, center_z-48:center_z+48]
+        unhealthy_mask = unhealthy_mask[center_x-64:center_x+64, center_y-64:center_y+64, center_z-48:center_z+48]
+        
         # print(mask_affine)
 
 
         # 二值化掩膜
-        mask = np.where(mask > 0, 1, 0)
-        mask_bool = (mask == 1)
+        unhealthy_mask = np.where(unhealthy_mask > 0, 1, 0)
+        unhealthy_mask_bool = (unhealthy_mask == 1)
 
         # 使用掩码对图像进行裁剪
-        cropped_image = image.copy()
-        cropped_image[mask_bool] = 0
+        image[unhealthy_mask_bool] = 0
 
         image = image[np.newaxis, ...]
         cropped_image = cropped_image[np.newaxis, ...]
-        mask = mask[np.newaxis, ...]
+        healthy_mask = healthy_mask[np.newaxis, ...]
 
-
-        return image, cropped_image, mask, mask_affine
+        # image 是健康的图像，即只抠掉肿瘤区域的图像 cropped_image是抠掉要生成区域的图像，mask是健康图像的掩膜
+        return image, cropped_image, healthy_mask, mask_affine
 
 # 数据加载
 # train_dataset = BrainTumorDataset('D:\\BraTS\\ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData')
