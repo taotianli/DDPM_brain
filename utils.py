@@ -50,14 +50,54 @@ class BrainTumorDataset(Dataset):
         # healthy_mask = np.pad(healthy_mask, ((0, 0), (0, 0), (3, 2)), mode='constant')
         # cropped_image = np.pad(cropped_image, ((0, 0), (0, 0), (3, 2)), mode='constant')
         # unhealthy_mask = np.pad(unhealthy_mask, ((0, 0), (0, 0), (3, 2)), mode='constant')
-        center_x, center_y, center_z = image.shape[0] // 2, image.shape[1] // 2, image.shape[2] // 2
-        image = image[center_x-64:center_x+64, center_y-64:center_y+64, center_z-48:center_z+48]
-        healthy_mask = healthy_mask[center_x-64:center_x+64, center_y-64:center_y+64, center_z-48:center_z+48]
-        cropped_image = cropped_image[center_x-64:center_x+64, center_y-64:center_y+64, center_z-48:center_z+48]
-        unhealthy_mask = unhealthy_mask[center_x-64:center_x+64, center_y-64:center_y+64, center_z-48:center_z+48]
-        
-        # print(mask_affine)
 
+        nonzero_coords = np.nonzero(healthy_mask)
+        center_x = (np.min(nonzero_coords[0]) + np.max(nonzero_coords[0])) // 2
+        center_y = (np.min(nonzero_coords[1]) + np.max(nonzero_coords[1])) // 2
+        center_z = (np.min(nonzero_coords[2]) + np.max(nonzero_coords[2])) // 2
+        image_shape = [240,240,155]
+        # 计算裁剪区域的边界
+        crop_x1 = max(center_x - 48, 0)
+        crop_x2 = min(center_x + 48, image_shape[0])
+        crop_y1 = max(center_y - 48, 0)
+        crop_y2 = min(center_y + 48, image_shape[1])
+        crop_z1 = max(center_z - 48, 0)
+        crop_z2 = min(center_z + 48, image_shape[2])
+        
+        # 如果裁剪区域小于 96x96x96,则在另一边扩展
+        crop_size_x = crop_x2 - crop_x1
+        crop_size_y = crop_y2 - crop_y1
+        crop_size_z = crop_z2 - crop_z1
+        
+        if crop_size_x < 96:
+            if center_x - 48 < 0:
+                crop_x1 = 0
+                crop_x2 = 96
+            else:
+                crop_x1 = image_shape[0] - 96
+                crop_x2 = image_shape[0]
+        
+        if crop_size_y < 96:
+            if center_y - 48 < 0:
+                crop_y1 = 0
+                crop_y2 = 96
+            else:
+                crop_y1 = image_shape[1] - 96
+                crop_y2 = image_shape[1]
+        
+        if crop_size_z < 96:
+            if center_z - 48 < 0:
+                crop_z1 = 0
+                crop_z2 = 96
+            else:
+                crop_z1 = image_shape[2] - 96
+                crop_z2 = image_shape[2]
+        
+        image = image[crop_x1:crop_x2, crop_y1:crop_y2, crop_z1:crop_z2]
+        healthy_mask = healthy_mask[crop_x1:crop_x2, crop_y1:crop_y2, crop_z1:crop_z2]
+        cropped_image = cropped_image[crop_x1:crop_x2, crop_y1:crop_y2, crop_z1:crop_z2]
+        unhealthy_mask = unhealthy_mask[crop_x1:crop_x2, crop_y1:crop_y2, crop_z1:crop_z2]
+    
 
         # 二值化掩膜
         unhealthy_mask = np.where(unhealthy_mask > 0, 1, 0)
@@ -79,14 +119,6 @@ class BrainTumorDataset(Dataset):
 # train_loader = DataLoader(train_dataset, batch_size=1, shuffle=True)
 
 def get_data(args):
-    # transforms = torchvision.transforms.Compose([
-    #     torchvision.transforms.Resize(80),
-    #     torchvision.transforms.RandomResizedCrop(args.image_size, scale=(0.8,1.0)),
-    #     torchvision.transforms.ToTensor(),
-    #     torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    # ])
-    # dataset = torchvision.datasets.ImageFolder(args.dataset_path, transform=transforms)
-    # dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
     dataset = BrainTumorDataset(args.dataset_path)
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
     return dataloader

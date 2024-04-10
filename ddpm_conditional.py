@@ -32,6 +32,7 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=log
 16:切成3Dpatch进行训练
 17:每个patch/部位都有一个position encoding，
 18:服务器上配一个环境，挂服务器上跑
+19:修改成DDIM版本，先训练一个
 """
 
 class Diffusion:
@@ -218,8 +219,8 @@ def launch():
     args.run_name = "DDPM_conditional"
     args.epochs = 500
     args.batch_size = 2
-    args.image_size = 128
-    args.dataset_path =  r"/hpc/data/home/bme/yubw/taotl/BraTS-2023_challenge/ASNR-MICCAI-BraTS2023-Local-Synthesis-Challenge-Training"
+    args.image_size = 64
+    args.dataset_path =  r"D:\BraTS\BraTS-2023_challenge\ASNR-MICCAI-BraTS2023-Local-Synthesis-Challenge-Training"
     args.device = "cuda"
     args.lr = 3e-4
     train(args)

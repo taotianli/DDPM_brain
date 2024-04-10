@@ -154,16 +154,18 @@ class ImageEncoder(nn.Module):
         self.conv2 = DoubleConv(64, c_out)
         self.pool = nn.MaxPool2d(2, 2)
         # self.fc1 = nn.Linear(c_out * 60 * 60, 1024)
-        self.fc1 = nn.Linear(c_out * 32 * 32, 1024)
+        self.fc1 = nn.Linear(c_out * 24 * 24, 1024)
         self.fc2 = nn.Linear(1024, time_dim)
 
     def forward(self, x):
         x = F.relu(self.conv1(x)) # 1,1,240,240
         x = self.pool(x)# 1,1,120,120
         x = F.relu(self.conv2(x))
+        # print(x.shape)
         x = self.pool(x)# 1,1,60,60
+        # print(x.shape)
         # x = x.view(-1, 60 *60)
-        x = x.view(-1, 32 * 32)
+        x = x.view(-1, 24*24)
         x = F.relu(self.fc1(x))
         x = self.fc2(x)
         # print('final emb shape',x.shape)
@@ -181,11 +183,11 @@ class UNet_conditional(nn.Module):
         # self.sa2 = SelfAttention(256, 60)
         # self.down3 = Down(256, 256)
         # self.sa3 = SelfAttention(256, 30)
-        self.sa1 = SelfAttention(128, 64)
+        self.sa1 = SelfAttention(128, 48)
         self.down2 = Down(128, 256)
-        self.sa2 = SelfAttention(256, 32)
+        self.sa2 = SelfAttention(256, 24)
         self.down3 = Down(256, 256)
-        self.sa3 = SelfAttention(256, 16)
+        self.sa3 = SelfAttention(256, 12)
 
         self.bot1 = DoubleConv(256, 512)
         self.bot2 = DoubleConv(512, 512)
@@ -197,11 +199,11 @@ class UNet_conditional(nn.Module):
         # self.sa5 = SelfAttention(64, 120)
         # self.up3 = Up(128, 64)
         # self.sa6 = SelfAttention(64, 240)
-        self.sa4 = SelfAttention(128, 32)
+        self.sa4 = SelfAttention(128, 24)
         self.up2 = Up(256, 64)
-        self.sa5 = SelfAttention(64, 64)
+        self.sa5 = SelfAttention(64, 48)
         self.up3 = Up(128, 64)
-        self.sa6 = SelfAttention(64, 128)
+        self.sa6 = SelfAttention(64, 96)
         self.outc = nn.Conv2d(64, c_out, kernel_size=1)
 
         self.image_encoder = ImageEncoder(c_in, c_out, self.time_dim)
