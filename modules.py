@@ -147,6 +147,7 @@ class CrossAttention(nn.Module):##需要做修改
         
         return x.swapaxes(1, 2).view(-1, self.channels, self.size, self.size)
     
+    
 class ImageEncoder(nn.Module):
     def __init__(self, c_in=1, c_out=1, time_dim=256):
         super(ImageEncoder, self).__init__()

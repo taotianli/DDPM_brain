@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
 """
 需要修改的地方：
-1:把label换成image encoder
+1:把label换成image encoder，后续可能换成transformer
 2:image inpainting 需要把生成的部分和原图拼接,读取的是原图和mask
 3:重写dataloader,修改get_args
 4:按照切片的方式读取数据
@@ -64,7 +64,7 @@ class Diffusion:
         logging.info(f"Sampling {n} new images....")
         model.eval()
         with torch.no_grad():
-            x = torch.randn((n, 3, self.img_size, self.img_size)).to(self.device)
+            x = torch.randn((n, 1, self.img_size, self.img_size)).to(self.device)
             for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
                 t = (torch.ones(n) * i).long().to(self.device)
                 predicted_noise = model(x, t, labels)
@@ -116,44 +116,44 @@ def inpaint_image(original_image, generated_image, mask):
 # output_image = inpaint_image(original_image, generated_image, mask)
 # print(output_image.shape)  # 输出合成后的图像尺寸
 
-def train_each_subject(images, device, diffusion, model, mse, optimizer, ema, pbar, ema_model, labels, masks):
-    # print(images.shape)
-    b, c, l, w, h = images.shape
-    # labels = mask
+# def train_each_subject(images, device, diffusion, model, mse, optimizer, ema, pbar, ema_model, labels, masks):
+#     # print(images.shape)
+#     b, c, l, w, h = images.shape
+#     # labels = mask
 
-    images_predict = torch.zeros_like(labels)
-    noise_predict = torch.zeros_like(labels)
-    loss = 0
-    for slice in range(96):
-        # print(slice) #size 应该是 b, c, 240, 240
-        images_slice = images[:,:,:,:,slice]
-        labels_slice = labels[:,:,:,:,slice]
-        #去掉一个维度
-        images_slice = images_slice.squeeze(-1)
-        labels_slice = labels_slice.squeeze(-1)
-        images_slice = images_slice.to(device)
-        labels_slice = labels_slice.to(device)
-        images_slice = images_slice.to(torch.float)
-        labels_slice = labels_slice.to(torch.float)
-        # print('input shape', images_slice.shape)
+#     images_predict = torch.zeros_like(labels)
+#     noise_predict = torch.zeros_like(labels)
+#     loss = 0
+#     for slice in range(96):
+#         # print(slice) #size 应该是 b, c, 240, 240
+#         images_slice = images[:,:,:,:,slice]
+#         labels_slice = labels[:,:,:,:,slice]
+#         #去掉一个维度
+#         images_slice = images_slice.squeeze(-1)
+#         labels_slice = labels_slice.squeeze(-1)
+#         images_slice = images_slice.to(device)
+#         labels_slice = labels_slice.to(device)
+#         images_slice = images_slice.to(torch.float)
+#         labels_slice = labels_slice.to(torch.float)
+#         # print('input shape', images_slice.shape)
 
 
-        t = diffusion.sample_timesteps(images_slice.shape[0]).to(device)
-        x_t, noise = diffusion.noise_images(images_slice, t)
-        # if np.random.random() < 0.1: #这两行是做什么的
-        #     labels = None
-        predicted_noise = model(x_t, t, labels_slice)
-        images_predict[:,:,:,:,slice] = predicted_noise
-        noise_predict[:,:,:,:,slice] = noise
-        images_predict_slice = inpaint_image(images[:,:,:,:,slice], images_predict[:,:,:,:,slice], masks[:,:,:,:,slice])
-        noise_predict_slice = inpaint_image(images[:,:,:,:,slice], noise_predict[:,:,:,:,slice], masks[:,:,:,:,slice])
-        loss = loss + mse(noise_predict_slice, images_predict_slice)
+#         t = diffusion.sample_timesteps(images_slice.shape[0]).to(device)
+#         x_t, noise = diffusion.noise_images(images_slice, t)
+#         # if np.random.random() < 0.1: #这两行是做什么的
+#         #     labels = None
+#         predicted_noise = model(x_t, t, labels_slice)
+#         images_predict[:,:,:,:,slice] = predicted_noise
+#         noise_predict[:,:,:,:,slice] = noise
+#         images_predict_slice = inpaint_image(images[:,:,:,:,slice], images_predict[:,:,:,:,slice], masks[:,:,:,:,slice])
+#         noise_predict_slice = inpaint_image(images[:,:,:,:,slice], noise_predict[:,:,:,:,slice], masks[:,:,:,:,slice])
+#         loss = loss + mse(noise_predict_slice, images_predict_slice)
 
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
+#     optimizer.zero_grad()
+#     loss.backward()
+#     optimizer.step()
 
-    return noise_predict, images_predict, loss
+#     return noise_predict, images_predict, loss
 
 
 def train(args):
@@ -172,24 +172,43 @@ def train(args):
     for epoch in range(args.epochs):
         logging.info(f"Starting epoch {epoch}:")
         pbar = tqdm(dataloader)
-        for i, (images, cropped_images, masks, _) in enumerate(pbar):
+        for i, (images, cropped_images, masks) in enumerate(pbar):
             # print(images.shape)
             images = images.to(device)
             labels = cropped_images.to(device)
-            # t = diffusion.sample_timesteps(images.shape[0]).to(device)
-            # x_t, noise = diffusion.noise_images(images, t)
-            # if np.random.random() < 0.1:
+            b, c, l, w = images.shape
+
+            images_predict = torch.zeros_like(images)
+            noise_predict = torch.zeros_like(images)
+
+            # print(slice) #size 应该是 b, 1, 240, 240
+            images_slice = images[:,:,:,:]
+            labels_slice = labels[:,:,:,:]
+            #去掉一个维度
+
+            images_slice = images_slice.to(device)
+            labels_slice = labels_slice.to(device)
+            images_slice = images_slice.to(torch.float)
+            labels_slice = labels_slice.to(torch.float)
+            # print('input shape', images_slice.shape)
+
+
+            t = diffusion.sample_timesteps(images_slice.shape[0]).to(device)
+            x_t, noise = diffusion.noise_images(images_slice, t)
+            # if np.random.random() < 0.1: #这两行是做什么的
             #     labels = None
-            # predicted_noise = model(x_t, t, labels)
-            # loss = mse(noise, predicted_noise)
+            predicted_noise = model(x_t, t, labels_slice)
+            images_predict[:,:,:,:] = predicted_noise
+            noise_predict[:,:,:,:] = noise
+            images_predict_slice = inpaint_image(images[:,:,:,:], images_predict[:,:,:,:], masks[:,:,:,:])
+            noise_predict_slice = inpaint_image(images[:,:,:,:], noise_predict[:,:,:,:], masks[:,:,:,:])
+            loss = mse(noise_predict_slice, images_predict_slice)
 
-            # optimizer.zero_grad()
-            # loss.backward()
-            # optimizer.step()
-            # ema.step_ema(ema_model, model)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-            # pbar.set_postfix(MSE=loss.item())
-            noise_predict, images_predict, loss = train_each_subject(images, device, diffusion, model, mse, optimizer, ema, pbar, ema_model, labels, masks)
+            # noise_predict, images_predict, loss = train_each_subject(images, device, diffusion, model, mse, optimizer, ema, pbar, ema_model, labels, masks)
             # loss = mse(noise_predict, images_predict)
 
             # optimizer.zero_grad()
@@ -218,9 +237,9 @@ def launch():
     args = parser.parse_args()
     args.run_name = "DDPM_conditional"
     args.epochs = 500
-    args.batch_size = 2
+    args.batch_size = 32
     args.image_size = 64
-    args.dataset_path =  r"D:\BraTS\BraTS-2023_challenge\ASNR-MICCAI-BraTS2023-Local-Synthesis-Challenge-Training"
+    args.dataset_path =  r"D:\ASNR-MICCAI-BraTS2023-Local-Synthesis-Challenge-Training"
     args.device = "cuda"
     args.lr = 3e-4
     train(args)
@@ -229,12 +248,13 @@ def launch():
 if __name__ == '__main__':
     launch()
     # device = "cuda"
-    # model = UNet_conditional(num_classes=10).to(device)
+    # model = UNet_conditional().to(device)
     # ckpt = torch.load("./models/DDPM_conditional/ckpt.pt")
     # model.load_state_dict(ckpt)
-    # diffusion = Diffusion(img_size=64, device=device)
-    # n = 8
+    # diffusion = Diffusion(img_size=128, device=device)
+    # n = 1
     # y = torch.Tensor([6] * n).long().to(device)
+    # print(y)
     # x = diffusion.sample(model, n, y, cfg_scale=0)
     # plot_images(x)
 
