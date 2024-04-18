@@ -15,7 +15,7 @@ date
 module list
 
 conda env list
-source /hpc/data/home/bme/yubw/anaconda3/bin/activate infill
+source /hpc/data/home/bme/yubw/anaconda3/bin/activate ddpm
 
 python3 make_image_slice.py
 

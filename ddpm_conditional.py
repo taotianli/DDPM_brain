@@ -15,24 +15,15 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=log
 """
 需要修改的地方：
 1:把label换成image encoder，后续可能换成transformer
-2:image inpainting 需要把生成的部分和原图拼接,读取的是原图和mask
-3:重写dataloader,修改get_args
-4:按照切片的方式读取数据
 5:改进guidance的方式(corss attention)
-6:最后拼接成一个3D图像
 7:加上实际的评价指标
-8:留出一部分数据做测试用，修改一下dataloader
-9:把尺寸减少，同时每个subject只计算mask相关的slice 128,128,96
-10:看一下batch size的问题
-11:修改sample部分
-12:编写数据增强的代码，随机采样，看大小/位置对结果的影响
-13:跑通评价指标代码
-14:每100个epoch sample一次所有数据
+11:修改部分
+14:每100个epoch 一次所有数据
 15:使用相邻slice做guidance
-16:切成3Dpatch进行训练
-17:每个patch/部位都有一个position encoding，
-18:服务器上配一个环境，挂服务器上跑
-19:修改成DDIM版本，先训练一个
+16:sample之后重新变成图片这一步可能有问题，不是直接归一化，可以用其他操作
+17:sample之后加一个inpaint，输出图像
+18:
+19:
 """
 
 class Diffusion:
@@ -57,7 +48,7 @@ class Diffusion:
         Ɛ = torch.randn_like(x)
         return sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * Ɛ, Ɛ
 
-    def sample_timesteps(self, n):
+    def _timesteps(self, n):
         return torch.randint(low=1, high=self.noise_steps, size=(n,))
 
     def sample(self, model, n, labels, cfg_scale=3):
@@ -79,9 +70,9 @@ class Diffusion:
                 else:
                     noise = torch.zeros_like(x)
                 x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted_noise) + torch.sqrt(beta) * noise
-        model.train()
-        x = (x.clamp(-1, 1) + 1) / 2
-        x = (x * 255).type(torch.uint8)
+        # model.train()
+        # x = (x.clamp(-1, 1) + 1) / 2
+        # x = (x * 255).type(torch.uint8)
         return x
 
 def inpaint_image(original_image, generated_image, mask):
@@ -108,58 +99,12 @@ def inpaint_image(original_image, generated_image, mask):
     
     return output_image
 
-# 使用示例
-# original_image = torch.randn(1, 3, 256, 256)  # 原始图像
-# generated_image = torch.randn(1, 3, 256, 256)  # 生成的图像
-# mask = torch.randint(0, 2, (1, 1, 256, 256), dtype=torch.float32)  # 掩码图像
-
-# output_image = inpaint_image(original_image, generated_image, mask)
-# print(output_image.shape)  # 输出合成后的图像尺寸
-
-# def train_each_subject(images, device, diffusion, model, mse, optimizer, ema, pbar, ema_model, labels, masks):
-#     # print(images.shape)
-#     b, c, l, w, h = images.shape
-#     # labels = mask
-
-#     images_predict = torch.zeros_like(labels)
-#     noise_predict = torch.zeros_like(labels)
-#     loss = 0
-#     for slice in range(96):
-#         # print(slice) #size 应该是 b, c, 240, 240
-#         images_slice = images[:,:,:,:,slice]
-#         labels_slice = labels[:,:,:,:,slice]
-#         #去掉一个维度
-#         images_slice = images_slice.squeeze(-1)
-#         labels_slice = labels_slice.squeeze(-1)
-#         images_slice = images_slice.to(device)
-#         labels_slice = labels_slice.to(device)
-#         images_slice = images_slice.to(torch.float)
-#         labels_slice = labels_slice.to(torch.float)
-#         # print('input shape', images_slice.shape)
-
-
-#         t = diffusion.sample_timesteps(images_slice.shape[0]).to(device)
-#         x_t, noise = diffusion.noise_images(images_slice, t)
-#         # if np.random.random() < 0.1: #这两行是做什么的
-#         #     labels = None
-#         predicted_noise = model(x_t, t, labels_slice)
-#         images_predict[:,:,:,:,slice] = predicted_noise
-#         noise_predict[:,:,:,:,slice] = noise
-#         images_predict_slice = inpaint_image(images[:,:,:,:,slice], images_predict[:,:,:,:,slice], masks[:,:,:,:,slice])
-#         noise_predict_slice = inpaint_image(images[:,:,:,:,slice], noise_predict[:,:,:,:,slice], masks[:,:,:,:,slice])
-#         loss = loss + mse(noise_predict_slice, images_predict_slice)
-
-#     optimizer.zero_grad()
-#     loss.backward()
-#     optimizer.step()
-
-#     return noise_predict, images_predict, loss
-
 
 def train(args):
     setup_logging(args.run_name)
     device = args.device
     dataloader = get_data(args)
+    test_dataloader = get_test_data(args)
     model = UNet_conditional().to(device)
     optimizer = optim.AdamW(model.parameters(), lr=args.lr)
     mse = nn.MSELoss()
@@ -174,8 +119,8 @@ def train(args):
         pbar = tqdm(dataloader)
         for i, (images, cropped_images, masks) in enumerate(pbar):
             # print(images.shape)
-            images = images.to(device)
-            labels = cropped_images.to(device)
+            # images = images.to(device)
+            labels = cropped_images
             b, c, l, w = images.shape
 
             images_predict = torch.zeros_like(images)
@@ -193,10 +138,8 @@ def train(args):
             # print('input shape', images_slice.shape)
 
 
-            t = diffusion.sample_timesteps(images_slice.shape[0]).to(device)
+            t = diffusion._timesteps(images_slice.shape[0]).to(device)
             x_t, noise = diffusion.noise_images(images_slice, t)
-            # if np.random.random() < 0.1: #这两行是做什么的
-            #     labels = None
             predicted_noise = model(x_t, t, labels_slice)
             images_predict[:,:,:,:] = predicted_noise
             noise_predict[:,:,:,:] = noise
@@ -207,28 +150,25 @@ def train(args):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
-            # noise_predict, images_predict, loss = train_each_subject(images, device, diffusion, model, mse, optimizer, ema, pbar, ema_model, labels, masks)
-            # loss = mse(noise_predict, images_predict)
-
-            # optimizer.zero_grad()
-            # loss.backward()
-            # optimizer.step()
             ema.step_ema(ema_model, model)
 
             pbar.set_postfix(MSE=loss.item())
             logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
-        if epoch % 10 == 0:
-        #     labels = torch.arange(10).long().to(device)
-        #     sampled_images = diffusion.sample(model, n=len(labels), labels=labels)
-        #     ema_sampled_images = diffusion.sample(ema_model, n=len(labels), labels=labels)
-        #     # plot_images(sampled_images)
-        #     save_images(sampled_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
-        #     save_images(ema_sampled_images, os.path.join("results", args.run_name, f"{epoch}_ema.jpg"))
-            torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
-            torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"ema_ckpt.pt"))
-            torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim.pt"))
+        
+        # images, cropped_images, masks = next(iter(pbar))
+        # b, _, _, _ = images.shape
+        # print('batch size:', b)
+        # d_images = diffusion.(model, n=b, labels=cropped_images)
+        # print(d_images.shape)
+        # # ema_d_images = diffusion.(ema_model, n=b, labels=cropped_images)
+        # # plot_images(d_images)
+        # save_images(d_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
+        # # save_images(ema_d_images, os.path.join("results", args.run_name, f"{epoch}_ema.jpg"))
+        torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
+        torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"ema_ckpt.pt"))
+        torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim.pt"))
+    
 
 
 def launch():
@@ -237,24 +177,56 @@ def launch():
     args = parser.parse_args()
     args.run_name = "DDPM_conditional"
     args.epochs = 500
-    args.batch_size = 32
+    args.batch_size = 16
     args.image_size = 64
-    args.dataset_path =  r"D:\ASNR-MICCAI-BraTS2023-Local-Synthesis-Challenge-Training"
+    # args.dataset_path =  r"D:\ASNR-MICCAI-BraTS2023-Local-Synthesis-Challenge-Training"
+    args.dataset_path =  r"C:\Users\DELL\Desktop\DDPM\ddpm_brats\DDPM_brain\test_data"
     args.device = "cuda"
     args.lr = 3e-4
+    args.train = True
+    args.shuffle = False
+    args.random_seed = 2024
     train(args)
 
 
 if __name__ == '__main__':
     launch()
-    # device = "cuda"
+
+    # import argparse
+    # parser = argparse.ArgumentParser()
+    # args = parser.parse_args()
+    # args.run_name = "DDPM_conditional"
+    # args.epochs = 500
+    # args.batch_size = 96
+    # args.image_size = 64
+    # # args.dataset_path =  r"D:\ASNR-MICCAI-BraTS2023-Local-Synthesis-Challenge-Training"
+    # args.dataset_path =  r"C:\Users\DELL\Desktop\DDPM\ddpm_brats\DDPM_brain\test_data"
+    # args.device = "cuda"
+    # args.lr = 3e-4
+    # args.train = True
+    # args.shuffle = False
+    # device = 'cuda'
+    # dataloader = get_data(args)
     # model = UNet_conditional().to(device)
     # ckpt = torch.load("./models/DDPM_conditional/ckpt.pt")
     # model.load_state_dict(ckpt)
-    # diffusion = Diffusion(img_size=128, device=device)
-    # n = 1
-    # y = torch.Tensor([6] * n).long().to(device)
-    # print(y)
-    # x = diffusion.sample(model, n, y, cfg_scale=0)
-    # plot_images(x)
+    # diffusion = Diffusion(img_size=args.image_size, device=device)
+    # pbar = tqdm(dataloader)
+    # images, cropped_images, masks = next(iter(pbar))
+    # b, _, _, _ = images.shape
+    # print('batch size:', b)
+    # print(images.type)
+    # images = (images.clamp(-1, 1) + 1) / 2
+    # images = (images * 255).type(torch.uint8)
+    # save_images(images, os.path.join("results", args.run_name, f"images.jpg"))
+    # masks = (masks.clamp(-1, 1) + 1) / 2
+    # masks = (masks * 255).type(torch.uint8)
+    # save_images(masks, os.path.join("results", args.run_name, f"masks.jpg"))
+    # d_images = diffusion.sample(model, n=b, labels=cropped_images)
+    # print(d_images.shape)
+    
+    # save_images(d_images, os.path.join("results", args.run_name, f"test.jpg"))
+    # # save_images(masks, os.path.join("results", args.run_name, f"masks.jpg"))
+    
+    # save_images(cropped_images, os.path.join("results", args.run_name, f"cropped_images.jpg"))
 

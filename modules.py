@@ -228,7 +228,7 @@ class UNet_conditional(nn.Module):
         # print('time embedding finished')
         if y is not None:
             t += self.image_encoder(y)
-
+        
         x1 = self.inc(x)
         x2 = self.down1(x1, t)
         # print('x2 shape', x2.shape)

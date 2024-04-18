@@ -19,7 +19,7 @@ module add cuda/7/11.4
 
 nvcc -V
 conda env list
-source /hpc/data/home/bme/yubw/anaconda3/bin/activate infill
+source /hpc/data/home/bme/yubw/anaconda3/bin/activate ddpm
 nvidia-smi
 lspci|grep -i vga
 
