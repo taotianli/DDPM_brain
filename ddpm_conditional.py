@@ -7,7 +7,7 @@ import torch.nn as nn
 from tqdm import tqdm
 from torch import optim
 from utils import *
-from modules import UNet_conditional, EMA
+from modules import UNet_conditional, EMA, UNet_conditional_concat, UNet_conditional_fully_concat
 import logging
 from torch.utils.tensorboard import SummaryWriter
 
@@ -22,8 +22,8 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=log
 15:使用相邻slice做guidance
 16:sample之后重新变成图片这一步可能有问题，不是直接归一化，可以用其他操作
 17:sample之后加一个inpaint，输出图像
-18:
-19:
+18:修改切片的话并不需要所有slice，可以去掉一些数据
+19:加上相邻切片做guidance
 """
 
 class Diffusion:
@@ -105,7 +105,9 @@ def train(args):
     device = args.device
     dataloader = get_data(args)
     test_dataloader = get_test_data(args)
-    model = UNet_conditional().to(device)
+    # model = UNet_conditional().to(device)
+    # model = UNet_conditional_concat().to(device)
+    model = UNet_conditional_fully_concat().to(device)
     optimizer = optim.AdamW(model.parameters(), lr=args.lr)
     mse = nn.MSELoss()
     diffusion = Diffusion(img_size=args.image_size, device=device)
@@ -177,7 +179,7 @@ def launch():
     args = parser.parse_args()
     args.run_name = "DDPM_conditional"
     args.epochs = 500
-    args.batch_size = 16
+    args.batch_size = 2
     args.image_size = 64
     # args.dataset_path =  r"D:\ASNR-MICCAI-BraTS2023-Local-Synthesis-Challenge-Training"
     args.dataset_path =  r"C:\Users\DELL\Desktop\DDPM\ddpm_brats\DDPM_brain\test_data"
@@ -192,41 +194,4 @@ def launch():
 if __name__ == '__main__':
     launch()
 
-    # import argparse
-    # parser = argparse.ArgumentParser()
-    # args = parser.parse_args()
-    # args.run_name = "DDPM_conditional"
-    # args.epochs = 500
-    # args.batch_size = 96
-    # args.image_size = 64
-    # # args.dataset_path =  r"D:\ASNR-MICCAI-BraTS2023-Local-Synthesis-Challenge-Training"
-    # args.dataset_path =  r"C:\Users\DELL\Desktop\DDPM\ddpm_brats\DDPM_brain\test_data"
-    # args.device = "cuda"
-    # args.lr = 3e-4
-    # args.train = True
-    # args.shuffle = False
-    # device = 'cuda'
-    # dataloader = get_data(args)
-    # model = UNet_conditional().to(device)
-    # ckpt = torch.load("./models/DDPM_conditional/ckpt.pt")
-    # model.load_state_dict(ckpt)
-    # diffusion = Diffusion(img_size=args.image_size, device=device)
-    # pbar = tqdm(dataloader)
-    # images, cropped_images, masks = next(iter(pbar))
-    # b, _, _, _ = images.shape
-    # print('batch size:', b)
-    # print(images.type)
-    # images = (images.clamp(-1, 1) + 1) / 2
-    # images = (images * 255).type(torch.uint8)
-    # save_images(images, os.path.join("results", args.run_name, f"images.jpg"))
-    # masks = (masks.clamp(-1, 1) + 1) / 2
-    # masks = (masks * 255).type(torch.uint8)
-    # save_images(masks, os.path.join("results", args.run_name, f"masks.jpg"))
-    # d_images = diffusion.sample(model, n=b, labels=cropped_images)
-    # print(d_images.shape)
-    
-    # save_images(d_images, os.path.join("results", args.run_name, f"test.jpg"))
-    # # save_images(masks, os.path.join("results", args.run_name, f"masks.jpg"))
-    
-    # save_images(cropped_images, os.path.join("results", args.run_name, f"cropped_images.jpg"))
 
