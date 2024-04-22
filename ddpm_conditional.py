@@ -106,8 +106,8 @@ def train(args):
     dataloader = get_data(args)
     test_dataloader = get_test_data(args)
     # model = UNet_conditional().to(device)
-    # model = UNet_conditional_concat().to(device)
-    model = UNet_conditional_fully_concat().to(device)
+    model = UNet_conditional_concat().to(device)
+    # model = UNet_conditional_fully_concat().to(device)
     optimizer = optim.AdamW(model.parameters(), lr=args.lr)
     mse = nn.MSELoss()
     diffusion = Diffusion(img_size=args.image_size, device=device)
@@ -143,11 +143,11 @@ def train(args):
             t = diffusion._timesteps(images_slice.shape[0]).to(device)
             x_t, noise = diffusion.noise_images(images_slice, t)
             predicted_noise = model(x_t, t, labels_slice)
-            images_predict[:,:,:,:] = predicted_noise
-            noise_predict[:,:,:,:] = noise
-            images_predict_slice = inpaint_image(images[:,:,:,:], images_predict[:,:,:,:], masks[:,:,:,:])
-            noise_predict_slice = inpaint_image(images[:,:,:,:], noise_predict[:,:,:,:], masks[:,:,:,:])
-            loss = mse(noise_predict_slice, images_predict_slice)
+            # images_predict[:,:,:,:] = predicted_noise
+            # noise_predict[:,:,:,:] = noise
+            # images_predict_slice = inpaint_image(images[:,:,:,:], images_predict[:,:,:,:], masks[:,:,:,:])
+            # noise_predict_slice = inpaint_image(images[:,:,:,:], noise_predict[:,:,:,:], masks[:,:,:,:])
+            loss = mse(noise, predicted_noise)
 
             optimizer.zero_grad()
             loss.backward()

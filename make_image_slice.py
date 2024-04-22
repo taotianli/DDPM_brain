@@ -17,7 +17,7 @@ def image_preprocess(image):
 
 data_dir = '/hpc/data/home/bme/yubw/taotl/BraTS-2023_challenge/ASNR-MICCAI-BraTS2023-Local-Synthesis-Challenge-Training/'
 subject_dirs = sorted([os.path.join(data_dir, name) for name in os.listdir(data_dir)])
-print(subject_dirs)
+# print(subject_dirs)
 for idx in range(len(subject_dirs)):
     subject_dir = subject_dirs[idx]
     print(subject_dir)
@@ -58,8 +58,10 @@ for idx in range(len(subject_dirs)):
     crop_x2 = min(center_x + 48, image_shape[0])
     crop_y1 = max(center_y - 48, 0)
     crop_y2 = min(center_y + 48, image_shape[1])
-    crop_z1 = max(center_z - 48, 0)
-    crop_z2 = min(center_z + 48, image_shape[2])
+    # crop_z1 = max(center_z - 48, 0)
+    # crop_z2 = min(center_z + 48, image_shape[2])
+    crop_z1 = np.min(nonzero_coords[2])
+    crop_z2 = np.max(nonzero_coords[2])
 
     # 如果裁剪区域小于 96x96x96,则在另一边扩展
     crop_size_x = crop_x2 - crop_x1
@@ -82,13 +84,13 @@ for idx in range(len(subject_dirs)):
             crop_y1 = image_shape[1] - 96
             crop_y2 = image_shape[1]
 
-    if crop_size_z < 96:
-        if center_z - 48 < 0:
-            crop_z1 = 0
-            crop_z2 = 96
-        else:
-            crop_z1 = image_shape[2] - 96
-            crop_z2 = image_shape[2]
+    # if crop_size_z < 96:
+    #     if center_z - 48 < 0:
+    #         crop_z1 = 0
+    #         crop_z2 = 96
+    #     else:
+    #         crop_z1 = image_shape[2] - 96
+    #         crop_z2 = image_shape[2]
 
     image = image[crop_x1:crop_x2, crop_y1:crop_y2, crop_z1:crop_z2]
     healthy_mask = healthy_mask[crop_x1:crop_x2, crop_y1:crop_y2, crop_z1:crop_z2]
@@ -123,4 +125,5 @@ for idx in range(len(subject_dirs)):
                  image=slice_image, 
                  healthy_mask=slice_healthy_mask,
                  cropped_image=slice_cropped_image)
+        
         
