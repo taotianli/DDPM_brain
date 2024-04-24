@@ -7,7 +7,7 @@ import torch.nn as nn
 from tqdm import tqdm
 from torch import optim
 from utils import *
-from modules import UNet_conditional, EMA, UNet_conditional_concat, UNet_conditional_fully_concat
+from modules import UNet_conditional, EMA, UNet_conditional_concat, UNet_conditional_fully_concat, UNet_conditional_fully_add
 import logging
 from torch.utils.tensorboard import SummaryWriter
 
@@ -104,9 +104,9 @@ def train(args):
     setup_logging(args.run_name)
     device = args.device
     dataloader = get_data(args)
-    test_dataloader = get_test_data(args)
+    # test_dataloader = get_test_data(args)
     # model = UNet_conditional().to(device)
-    model = UNet_conditional_concat().to(device)
+    model = UNet_conditional_fully_add().to(device)
     # model = UNet_conditional_fully_concat().to(device)
     optimizer = optim.AdamW(model.parameters(), lr=args.lr)
     mse = nn.MSELoss()
@@ -125,8 +125,8 @@ def train(args):
             labels = cropped_images
             b, c, l, w = images.shape
 
-            images_predict = torch.zeros_like(images)
-            noise_predict = torch.zeros_like(images)
+            # images_predict = torch.zeros_like(images)
+            # noise_predict = torch.zeros_like(images)
 
             # print(slice) #size 应该是 b, 1, 240, 240
             images_slice = images[:,:,:,:]

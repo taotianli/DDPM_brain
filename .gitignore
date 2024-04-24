@@ -1,2 +1,5 @@
 # 忽略model文件夹更新
 /models
+
+# 忽略test_data更新
+/test_data

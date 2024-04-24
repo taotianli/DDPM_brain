@@ -541,6 +541,7 @@ class UNet_conditional_fully_add(nn.Module):
         self.ca2 = CrossAttention(256, 24)
         self.down3 = Down(256, 256)
         self.sa3 = SelfAttention(256, 12)
+        self.ca3 = CrossAttention(256, 12)
 
         self.bot1 = DoubleConv(256, 512)
         self.bot2 = DoubleConv(512, 512)
@@ -548,10 +549,13 @@ class UNet_conditional_fully_add(nn.Module):
 
         self.up1 = Up(512, 128)
         self.sa4 = SelfAttention(128, 24)
+        self.ca4 = CrossAttention(128, 24)
         self.up2 = Up(256, 64)
         self.sa5 = SelfAttention(64, 48)
+        self.ca5 = CrossAttention(64, 48)
         self.up3 = Up(128, 64)
         self.sa6 = SelfAttention(64, 96)
+        self.ca6 = CrossAttention(64, 96)
 
         self.inc_y = DoubleConv(c_in, 64)
         self.down1_y = Down_img(64, 128)
@@ -591,17 +595,20 @@ class UNet_conditional_fully_add(nn.Module):
         
         y2 = self.down1_y(y1)
         x2 = self.ca1(x2, y2)
+        # print('x2 shape', x2.shape)
         x2_1 = x2 + y2
 
         x3 = self.down2(x2_1, t)
         # print('x3 shape', x3.shape)
-        x3 = self.sa2(x3)
+        
         y3 = self.down2_y(y2)
+        x3 = self.ca2(x3, y3)
         x3_1 = x3 + y3
         
         x4 = self.down3(x3_1, t)
-        x4 = self.sa3(x4)
+        
         y4 = self.down3_y(y3)
+        x4 = self.ca3(x4, y4)
         x4_1 = x4 + y4
         # print('x4 shape', x4.shape)
 
@@ -612,7 +619,7 @@ class UNet_conditional_fully_add(nn.Module):
 
         x = self.up1(x4, x3, t)
         # print('x shape up 1', x.shape)
-        x = self.sa4(x)
+        # x = self.ca4(x)
         # print('sa4 shape', x.shape)
         x = self.up2(x, x2, t)
         # print('x shape up 2', x.shape)
