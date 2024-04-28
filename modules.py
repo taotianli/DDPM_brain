@@ -629,8 +629,6 @@ class UNet_conditional_fully_add(nn.Module):
         # x = self.sa6(x)
         output = self.outc(x)
         return output
-    
-
 
 class UNet_conditional_fully_concat_cross_attention(nn.Module):
     '''
@@ -722,6 +720,84 @@ class UNet_conditional_fully_concat_cross_attention(nn.Module):
         x = self.up2(x, x2, t)
         # print('x shape up 2', x.shape)
         # x = self.sa5(x)
+        # print('sa5 shape', x.shape)
+        x = self.up3(x, x1, t)
+        # x = self.sa6(x)
+        output = self.outc(x)
+        return output
+    
+class UNet_conditional_concat_pseudo_3D(nn.Module):
+    '''
+    在输入上concat一次
+    '''
+    def __init__(self, c_in=4, c_out=1, time_dim=256, device="cuda"):
+        super().__init__()
+        self.device = device
+        self.time_dim = time_dim
+        self.inc = DoubleConv(c_in, 64)
+        self.down1 = Down(64, 128)
+        self.sa1 = SelfAttention(128, 48)
+        self.down2 = Down(128, 256)
+        self.sa2 = SelfAttention(256, 24)
+        self.down3 = Down(256, 256)
+        self.sa3 = SelfAttention(256, 12)
+
+        self.bot1 = DoubleConv(256, 512)
+        self.bot2 = DoubleConv(512, 512)
+        self.bot3 = DoubleConv(512, 256)
+
+        self.up1 = Up(512, 128)
+        self.sa4 = SelfAttention(128, 24)
+        self.up2 = Up(256, 64)
+        self.sa5 = SelfAttention(64, 48)
+        self.up3 = Up(128, 64)
+        self.sa6 = SelfAttention(64, 96)
+        self.outc = nn.Conv2d(64, c_out, kernel_size=1)
+
+        self.image_encoder = ImageEncoder(1, c_out, self.time_dim)
+
+    def pos_encoding(self, t, channels):
+        inv_freq = 1.0 / (
+            10000
+            ** (torch.arange(0, channels, 2, device=self.device).float() / channels)
+        )
+        pos_enc_a = torch.sin(t.repeat(1, channels // 2) * inv_freq)
+        pos_enc_b = torch.cos(t.repeat(1, channels // 2) * inv_freq)
+        pos_enc = torch.cat([pos_enc_a, pos_enc_b], dim=-1)
+        return pos_enc
+    
+
+    def forward(self, x, t, y):
+        t = t.unsqueeze(-1).type(torch.float)
+        t = self.pos_encoding(t, self.time_dim)
+        # print(y.shape)
+        if y is not None:
+            t += self.image_encoder(y)
+        x = torch.concat([x, y], dim=1)
+        x1 = self.inc(x)
+        x2 = self.down1(x1, t)
+        # print('x2 shape', x2.shape)
+        # x2 = self.sa1(x2)
+        x3 = self.down2(x2, t)
+        # print('x3 shape', x3.shape)
+        x3 = self.sa2(x3)
+        
+        x4 = self.down3(x3, t)
+        x4 = self.sa3(x4)
+        # print('x4 shape', x4.shape)
+
+        x4 = self.bot1(x4)
+        x4 = self.bot2(x4)
+        x4 = self.bot3(x4)
+        # print('x4 shape', x4.shape)
+
+        x = self.up1(x4, x3, t)
+        # print('x shape up 1', x.shape)
+        x = self.sa4(x)
+        # print('sa4 shape', x.shape)
+        x = self.up2(x, x2, t)
+        # print('x shape up 2', x.shape)
+        x = self.sa5(x)
         # print('sa5 shape', x.shape)
         x = self.up3(x, x1, t)
         # x = self.sa6(x)
