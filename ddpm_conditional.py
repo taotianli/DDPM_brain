@@ -24,9 +24,6 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=log
 17:sample之后加一个inpaint，输出图像
 18:修改切片的话并不需要所有slice，可以去掉一些数据
 19:加上相邻切片做guidance
-<<<<<<< HEAD
-20:
-=======
 20:同一个人用相同的schedule去燥
 21:层间不一致的问题
 22:边界添加，拼接
@@ -41,9 +38,7 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=log
 31:告诉模型生的区域是那块区域，输入这个mask的坐标，希望他能学到这个区域大概的样子
 32:试一下group norm
 33:试一下打乱效果会不会好一些
-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
->>>>>>> 5c15b98ed43c40d6ae5120e43e9ac102c75b05e4
-fsdfa
+34:试一下用视频生成的方式来生成MRI，看下效果会不会好点
 """
 
 class Diffusion:
@@ -177,19 +172,19 @@ def train(args):
             pbar.set_postfix(MSE=loss.item())
             logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
-        
-        # images, cropped_images, masks = next(iter(pbar))
-        # b, _, _, _ = images.shape
-        # print('batch size:', b)
-        # d_images = diffusion.(model, n=b, labels=cropped_images)
-        # print(d_images.shape)
-        # # ema_d_images = diffusion.(ema_model, n=b, labels=cropped_images)
-        # # plot_images(d_images)
-        # save_images(d_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
-        # # save_images(ema_d_images, os.path.join("results", args.run_name, f"{epoch}_ema.jpg"))
-        torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
-        torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"ema_ckpt.pt"))
-        torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim.pt"))
+        if epoch % 5 == 0:
+            # images, cropped_images, masks = next(iter(pbar))
+            # b, _, _, _ = images.shape
+            # print('batch size:', b)
+            # d_images = diffusion.(model, n=b, labels=cropped_images)
+            # print(d_images.shape)
+            # ema_d_images = diffusion.(ema_model, n=b, labels=cropped_images)
+            # plot_images(d_images)
+            # save_images(d_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
+            # save_images(ema_d_images, os.path.join("results", args.run_name, f"{epoch}_ema.jpg"))
+            torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
+            torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"ema_ckpt.pt"))
+            torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim.pt"))
     
 
 
@@ -206,7 +201,7 @@ def launch():
     args.device = "cuda"
     args.lr = 3e-4
     args.train = True
-    args.shuffle = False
+    args.shuffle = True
     args.random_seed = 2024
     train(args)
 
