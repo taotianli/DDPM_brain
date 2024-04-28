@@ -24,6 +24,7 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=log
 17:sample之后加一个inpaint，输出图像
 18:修改切片的话并不需要所有slice，可以去掉一些数据
 19:加上相邻切片做guidance
+20:
 """
 
 class Diffusion:
