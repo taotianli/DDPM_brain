@@ -14,20 +14,13 @@ from torch.utils.tensorboard import SummaryWriter
 logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
 """
 需要修改的地方：
-1:把label换成image encoder，后续可能换成transformer
-5:改进guidance的方式(corss attention)
 7:加上实际的评价指标
-11:修改部分
-14:每100个epoch 一次所有数据
 15:使用相邻slice做guidance
 16:sample之后重新变成图片这一步可能有问题，不是直接归一化，可以用其他操作
 17:sample之后加一个inpaint，输出图像
-18:修改切片的话并不需要所有slice，可以去掉一些数据
-19:加上相邻切片做guidance
-20:同一个人用相同的schedule去燥
+20:同一个人用相同的schedule去燥，好像不太行？
 21:层间不一致的问题
 22:边界添加，拼接
-23:需要生成的部分先用average填充，和背景做区分，或者将背景部分置为负无穷
 24:添加自动生成结果
 25:自动计算量化结果
 26:修改loss，将PSNR 作为loss放进去。平衡全局loss和局部的权重。
@@ -39,6 +32,9 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=log
 32:试一下group norm
 33:试一下打乱效果会不会好一些
 34:试一下用视频生成的方式来生成MRI，看下效果会不会好点
+35:Masked Diffusion model:https://arxiv.org/pdf/2308.05695
+36:可以试一下加各种编码
+37:Mamba复现 UMamba Swin-UMamba ... https://www.bilibili.com/read/cv31896604/
 """
 
 class Diffusion:
