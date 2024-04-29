@@ -7,7 +7,7 @@ import torch.nn as nn
 from tqdm import tqdm
 from torch import optim
 from utils import *
-from modules import UNet_conditional, EMA, UNet_conditional_concat, UNet_conditional_fully_concat, UNet_conditional_fully_add
+from modules import UNet_conditional, EMA, UNet_conditional_concat, UNet_conditional_fully_concat, UNet_conditional_fully_add, UNet_conditional_concat_with_mask, UNet_conditional_concat_with_mask_v2
 import logging
 from torch.utils.tensorboard import SummaryWriter
 
@@ -35,6 +35,8 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=log
 35:Masked Diffusion model:https://arxiv.org/pdf/2308.05695
 36:可以试一下加各种编码
 37:Mamba复现 UMamba Swin-UMamba ... https://www.bilibili.com/read/cv31896604/
+38:完成128和192尺寸的UNET
+39:实现添加位置信息的UNET
 """
 
 class Diffusion:
@@ -117,7 +119,7 @@ def train(args):
     dataloader = get_data(args)
     # test_dataloader = get_test_data(args)
     # model = UNet_conditional().to(device)
-    model = UNet_conditional_fully_add().to(device)
+    model = UNet_conditional_concat_with_mask_v2().to(device)
     # model = UNet_conditional_fully_concat().to(device)
     optimizer = optim.AdamW(model.parameters(), lr=args.lr)
     mse = nn.MSELoss()
@@ -142,22 +144,21 @@ def train(args):
             # print(slice) #size 应该是 b, 1, 240, 240
             images_slice = images[:,:,:,:]
             labels_slice = labels[:,:,:,:]
-            #去掉一个维度
+            masks_slice = masks[:,:,:,:]
 
             images_slice = images_slice.to(device)
             labels_slice = labels_slice.to(device)
+            masks_slice = masks_slice.to(device)
+
             images_slice = images_slice.to(torch.float)
             labels_slice = labels_slice.to(torch.float)
+            masks_slice = masks_slice.to(torch.float)
             # print('input shape', images_slice.shape)
 
 
             t = diffusion._timesteps(images_slice.shape[0]).to(device)
             x_t, noise = diffusion.noise_images(images_slice, t)
-            predicted_noise = model(x_t, t, labels_slice)
-            # images_predict[:,:,:,:] = predicted_noise
-            # noise_predict[:,:,:,:] = noise
-            # images_predict_slice = inpaint_image(images[:,:,:,:], images_predict[:,:,:,:], masks[:,:,:,:])
-            # noise_predict_slice = inpaint_image(images[:,:,:,:], noise_predict[:,:,:,:], masks[:,:,:,:])
+            predicted_noise = model(x_t, t, labels_slice, masks_slice)
             loss = mse(noise, predicted_noise)
 
             optimizer.zero_grad()
