@@ -10,6 +10,7 @@ from utils import *
 from modules import UNet_conditional, EMA, UNet_conditional_concat, UNet_conditional_fully_concat, UNet_conditional_fully_add, UNet_conditional_concat_with_mask, UNet_conditional_concat_with_mask_v2
 import logging
 from torch.utils.tensorboard import SummaryWriter
+# from inpainting.challenge_metrics_2023 import generate_metrics
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
 """

@@ -165,6 +165,37 @@ class CrossAttention(nn.Module):##需要做修改
         return x.swapaxes(1, 2).view(-1, self.channels, self.size, self.size)
     
     
+class GAM_Attention(nn.Module):
+    def __init__(self, in_channels, rate=4):
+        super(GAM_Attention, self).__init__()
+
+        self.channel_attention = nn.Sequential(
+            nn.Linear(in_channels, int(in_channels / rate)),
+            nn.ReLU(inplace=True),
+            nn.Linear(int(in_channels / rate), in_channels)
+        )
+
+        self.spatial_attention = nn.Sequential(
+            nn.Conv2d(in_channels, int(in_channels / rate), kernel_size=7, padding=3),
+            nn.BatchNorm2d(int(in_channels / rate)),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(int(in_channels / rate), in_channels, kernel_size=7, padding=3),
+            nn.BatchNorm2d(in_channels)
+        )
+
+    def forward(self, x):
+        b, c, h, w = x.shape
+        x_permute = x.permute(0, 2, 3, 1).view(b, -1, c)
+        x_att_permute = self.channel_attention(x_permute).view(b, h, w, c)
+        x_channel_att = x_att_permute.permute(0, 3, 1, 2).sigmoid()
+
+        x = x * x_channel_att
+
+        x_spatial_att = self.spatial_attention(x).sigmoid()
+        out = x * x_spatial_att
+
+        return out
+
 class ImageEncoder(nn.Module):
     def __init__(self, c_in=1, c_out=1, time_dim=256):
         super(ImageEncoder, self).__init__()
@@ -974,22 +1005,22 @@ class UNet_conditional_concat_Large(nn.Module):
         self.time_dim = time_dim
         self.inc = DoubleConv(c_in, 64)
         self.down1 = Down(64, 128)
-        self.sa1 = SelfAttention(128, 48)
+        self.sa1 = SelfAttention(128, 64)
         self.down2 = Down(128, 256)
-        self.sa2 = SelfAttention(256, 24)
+        self.sa2 = SelfAttention(256, 32)
         self.down3 = Down(256, 256)
-        self.sa3 = SelfAttention(256, 12)
+        self.sa3 = SelfAttention(256, 16)
 
         self.bot1 = DoubleConv(256, 512)
         self.bot2 = DoubleConv(512, 512)
         self.bot3 = DoubleConv(512, 256)
 
         self.up1 = Up(512, 128)
-        self.sa4 = SelfAttention(128, 24)
+        self.sa4 = SelfAttention(128, 32)
         self.up2 = Up(256, 64)
-        self.sa5 = SelfAttention(64, 48)
+        self.sa5 = SelfAttention(64, 64)
         self.up3 = Up(128, 64)
-        self.sa6 = SelfAttention(64, 96)
+        self.sa6 = SelfAttention(64, 128)
         self.outc = nn.Conv2d(64, c_out, kernel_size=1)
 
         self.image_encoder = ImageEncoder(1, c_out, self.time_dim)
@@ -1053,22 +1084,22 @@ class UNet_conditional_concat_XLarge(nn.Module):
         self.time_dim = time_dim
         self.inc = DoubleConv(c_in, 64)
         self.down1 = Down(64, 128)
-        self.sa1 = SelfAttention(128, 48)
+        self.sa1 = SelfAttention(128, 96)
         self.down2 = Down(128, 256)
-        self.sa2 = SelfAttention(256, 24)
+        self.sa2 = SelfAttention(256, 48)
         self.down3 = Down(256, 256)
-        self.sa3 = SelfAttention(256, 12)
+        self.sa3 = SelfAttention(256, 24)
 
         self.bot1 = DoubleConv(256, 512)
         self.bot2 = DoubleConv(512, 512)
         self.bot3 = DoubleConv(512, 256)
 
         self.up1 = Up(512, 128)
-        self.sa4 = SelfAttention(128, 24)
+        self.sa4 = SelfAttention(128, 48)
         self.up2 = Up(256, 64)
-        self.sa5 = SelfAttention(64, 48)
+        self.sa5 = SelfAttention(64, 96)
         self.up3 = Up(128, 64)
-        self.sa6 = SelfAttention(64, 96)
+        self.sa6 = SelfAttention(64, 192)
         self.outc = nn.Conv2d(64, c_out, kernel_size=1)
 
         self.image_encoder = ImageEncoder(1, c_out, self.time_dim)
