@@ -7,6 +7,7 @@ import torch.nn as nn
 from tqdm import tqdm
 from torch import optim
 from utils import *
+from utils import _structural_similarity_index, _peak_signal_noise_ratio, _mean_squared_error
 from modules import UNet_conditional, EMA, UNet_conditional_concat, UNet_conditional_fully_concat, UNet_conditional_fully_add, UNet_conditional_concat_with_mask, UNet_conditional_concat_with_mask_v2
 import logging
 from torch.utils.tensorboard import SummaryWriter
@@ -39,6 +40,8 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=log
 38:完成128和192尺寸的UNET
 39:实现添加位置信息的UNET
 40:加一段sample合成一个nifti的代码
+41:复现i2sb和rddpm的代码
+42:加上数据增强的代码，旋转，滑窗
 """
 
 class Diffusion:
@@ -119,7 +122,7 @@ def train(args):
     setup_logging(args.run_name)
     device = args.device
     dataloader = get_data(args)
-    # test_dataloader = get_test_data(args)
+    test_dataloader = get_test_data(args)
     # model = UNet_conditional().to(device)
     model = UNet_conditional_concat_with_mask_v2().to(device)
     # model = UNet_conditional_fully_concat().to(device)
@@ -139,9 +142,6 @@ def train(args):
             # images = images.to(device)
             labels = cropped_images
             b, c, l, w = images.shape
-
-            # images_predict = torch.zeros_like(images)
-            # noise_predict = torch.zeros_like(images)
 
             # print(slice) #size 应该是 b, 1, 240, 240
             images_slice = images[:,:,:,:]
@@ -172,18 +172,60 @@ def train(args):
             logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
         if epoch % 5 == 0:
-            # images, cropped_images, masks = next(iter(pbar))
-            # b, _, _, _ = images.shape
-            # print('batch size:', b)
-            # d_images = diffusion.(model, n=b, labels=cropped_images)
-            # print(d_images.shape)
-            # ema_d_images = diffusion.(ema_model, n=b, labels=cropped_images)
-            # plot_images(d_images)
-            # save_images(d_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
-            # save_images(ema_d_images, os.path.join("results", args.run_name, f"{epoch}_ema.jpg"))
-            torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
-            torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"ema_ckpt.pt"))
-            torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim.pt"))
+            with torch.no_grad():
+                pbar_test = tqdm(test_dataloader)
+                ssim_list = []
+                psnr_list = []
+                mse_list = []
+                for i, (images, cropped_images, masks) in enumerate(pbar_test):
+                    modefied_images = cropped_images
+                    b, _, _, _ = images.shape
+                    d_images = diffusion.sample(model, n=b, labels=modefied_images, masks=masks)
+                    images_predict_slice, _, _ = inpaint_image(images[:,:,:,:], d_images[:,:,:,:], masks[:,:,:,:])
+                    img = image_preprocess_tensor(img)
+                    d_img = image_preprocess(d_img)
+
+                    img_copy = img.unsqueeze(0).unsqueeze(0)
+                    d_img_copy = d_img.unsqueeze(0).unsqueeze(0)
+                    masks = masks.cpu()
+                    mask_copy = masks.unsqueeze(0).unsqueeze(0)
+
+                    mask_copy = mask_copy.bool()
+                    images = images.cpu()
+                    d_images_new = images_predict_slice.cpu()
+                    dd = d_images[:,:,:,:].cpu()
+                    cropped_images = modefied_images.cpu()
+
+                    for index in range(args.batch_size):
+                        img = images[index, 0, :, :]
+                        d_img = d_images_new[index, 0, :, :]
+                        c_img = cropped_images[index, 0, :, :]
+                        dd_img = dd[index, 0, :, :]
+
+                        ssim = _structural_similarity_index(
+                                target=img_copy,
+                                prediction=d_img_copy,
+                                mask=mask_copy,
+                            ).item()
+                        mse = _mean_squared_error(
+                                target=img_copy,
+                                prediction=d_img_copy,
+                                squared=True,
+                            ).item()
+                        psnr = _peak_signal_noise_ratio(
+                                target=img_copy,
+                                prediction=d_img_copy,
+                            ).item()
+                        
+                        ssim_list.append(ssim)
+                        psnr_list.append(psnr)
+                        mse_list.append(mse)
+
+                # save_images(d_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
+                save_images(img, c_img, dd_img, d_img, os.path.join("results", args.run_name, f"{epoch}_ema.jpg"))
+                torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
+                torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"ema_ckpt.pt"))
+                torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim.pt"))
     
 
 
