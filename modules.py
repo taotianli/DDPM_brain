@@ -963,7 +963,7 @@ class UNet_conditional_concat_with_mask_v2(nn.Module):
         if y is not None:
             t += self.image_encoder(m)
         x = torch.concat([x, y], dim=1)
-        print(x.shape,y.shape)
+        # print(x.shape,y.shape)
         x1 = self.inc(x)
         x2 = self.down1(x1, t)
         # print('x2 shape', x2.shape)

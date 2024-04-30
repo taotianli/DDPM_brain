@@ -38,6 +38,7 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=log
 37:Mamba复现 UMamba Swin-UMamba ... https://www.bilibili.com/read/cv31896604/
 38:完成128和192尺寸的UNET
 39:实现添加位置信息的UNET
+40:加一段sample合成一个nifti的代码
 """
 
 class Diffusion:
