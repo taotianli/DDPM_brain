@@ -77,6 +77,40 @@ class BrainTumorDataset(Dataset):
         cropped_image = torch.from_numpy(cropped_image).squeeze(-1)
         healthy_mask = torch.from_numpy(healthy_mask).squeeze(-1)
         return image.to(self.device), cropped_image.to(self.device), healthy_mask.to(self.device)
+    
+class BrainTumorDataset_new(Dataset):
+    def __init__(self, data_dir, train=True, device='cuda'):
+        self.data_dir = data_dir
+        self.train = train
+        self.device = device
+        self.subject_dirs = subject_dirs = sorted(glob.glob(os.path.join(data_dir, '**', '*new.npz'), recursive=True))
+        train_size = int(0.9 * len(self.subject_dirs))
+        if self.train:
+            self.subject_dirs = self.subject_dirs[:train_size]
+        else:
+            self.subject_dirs = self.subject_dirs[train_size:]
+        # print(self.subject_dirs)
+
+    def __len__(self):
+        return len(self.subject_dirs)
+
+    def __getitem__(self, idx):
+        subject_slice_path = self.subject_dirs[idx]
+        with np.load(subject_slice_path) as data:
+            image = data['image']
+            healthy_mask = data['healthy_mask']
+            cropped_image = data['cropped_image']
+            cropped_image_preinfilled=data['cropped_image_preinfilled']
+            geometric_list=data['geometric_list']
+            adjacency_image=data['adjacency_image']
+            # unhealthy_mask = data['unhealthy_mask']
+        # image 是健康的图像，即只抠掉肿瘤区域的图像 cropped_image是抠掉要生成区域的图像，mask是健康图像的掩膜
+        image = torch.from_numpy(image).squeeze(-1)
+        cropped_image = torch.from_numpy(cropped_image).squeeze(-1)
+        healthy_mask = torch.from_numpy(healthy_mask).squeeze(-1)
+        cropped_image_preinfilled = torch.from_numpy(cropped_image_preinfilled).squeeze(-1)
+        adjacency_image = torch.from_numpy(adjacency_image).squeeze(-1)
+        return image.to(self.device), cropped_image.to(self.device), healthy_mask.to(self.device), cropped_image_preinfilled.to(self.device), adjacency_image.to(self.device), geometric_list
 
 # 数据加载
 # train_dataset = BrainTumorDataset('D:\\BraTS\\ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData')
