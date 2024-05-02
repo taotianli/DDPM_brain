@@ -43,6 +43,8 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=log
 41:复现i2sb和rddpm的代码,用残差生成
 42:加上数据增强的代码，旋转，滑窗
 43:可以用多级的信息来一起生成
+44:保存nifti!!!
+45:算指标的有问题？？
 """
 
 class Diffusion:
