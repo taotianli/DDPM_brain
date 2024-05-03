@@ -127,14 +127,14 @@ def train(args):
     dataloader = get_data_new(args)
     # test_dataloader = get_test_data(args)
     # model = UNet_conditional().to(device)
-    model = UNet_conditional_concat_Large().to(device)
+    model = UNet_conditional_concat_XLarge().to(device)
     # model = UNet_conditional_fully_concat().to(device)
     optimizer = optim.AdamW(model.parameters(), lr=args.lr)
     mse = nn.MSELoss()
     diffusion = Diffusion(img_size=args.image_size, device=device)
     logger = SummaryWriter(os.path.join("runs", args.run_name))
     l = len(dataloader)
-    ema = EMA(0.995)
+    ema = EMA(0.999)
     ema_model = copy.deepcopy(model).eval().requires_grad_(False)
 
     for epoch in range(args.epochs):
@@ -239,11 +239,11 @@ def launch():
     args.run_name = "DDPM_conditional"
     args.epochs = 500
     args.batch_size = 2
-    args.image_size = 64
+    args.image_size = 256
     # args.dataset_path =  r"D:\ASNR-MICCAI-BraTS2023-Local-Synthesis-Challenge-Training"
     args.dataset_path =  r"C:\Users\DELL\Desktop\DDPM\ddpm_brats\DDPM_brain\test_data"
     args.device = "cuda"
-    args.lr = 3e-4
+    args.lr = 1e-4
     args.train = True
     args.shuffle = True
     args.random_seed = 2024
