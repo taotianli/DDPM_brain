@@ -50,7 +50,7 @@ for idx in range(len(subject_dirs)):
     center_y = (np.min(nonzero_coords[1]) + np.max(nonzero_coords[1])) // 2
     center_z = (np.min(nonzero_coords[2]) + np.max(nonzero_coords[2])) // 2
     image_shape = [240,240,155]
-    img_size = 128
+    img_size = 192
     # 计算裁剪区域的边界
     crop_x1 = max(center_x - int(img_size/2), 0)
     crop_x2 = min(center_x + int(img_size/2), image_shape[0])

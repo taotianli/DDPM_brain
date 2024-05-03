@@ -6,8 +6,8 @@
 #SBATCH --mail-user=taotl2022@shanghaitech.edu.cn
 #SBATCH -N 1
 #SBATCH -t 5-00:00:00
-#SBATCH --output=train.out
-#SBATCH --error=train.error
+#SBATCH --output=slice.out
+#SBATCH --error=slice.error
 
 pwd
 hostname
