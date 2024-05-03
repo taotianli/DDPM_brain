@@ -219,6 +219,30 @@ class ImageEncoder(nn.Module):
         x = self.fc2(x)
         # print('final emb shape',x.shape)
         return x
+    
+class ImageEncoder_new(nn.Module):
+    def __init__(self, c_in=1, c_out=1, time_dim=256):
+        super(ImageEncoder_new, self).__init__()
+        self.conv1 = DoubleConv(c_in, 64)
+        self.conv2 = DoubleConv(64, c_out)
+        self.pool = nn.MaxPool2d(2, 2)
+        # self.fc1 = nn.Linear(c_out * 60 * 60, 1024)
+        self.fc1 = nn.Linear(2048, 1024)
+        self.fc2 = nn.Linear(1024, time_dim)
+
+    def forward(self, x):
+        x = F.relu(self.conv1(x)) # 1,1,240,240
+        x = self.pool(x)# 1,1,120,120
+        x = F.relu(self.conv2(x))
+        # print(x.shape)
+        x = self.pool(x)# 1,1,60,60
+        # print(x.shape)
+        # x = x.view(-1, 60 *60)
+        x = x.view(-1, 2048)
+        x = F.relu(self.fc1(x))
+        x = self.fc2(x)
+        # print('final emb shape',x.shape)
+        return x
 
 class UNet_conditional(nn.Module):
     def __init__(self, c_in=1, c_out=1, time_dim=256, device="cuda"):
@@ -1023,7 +1047,7 @@ class UNet_conditional_concat_Large(nn.Module):
         self.sa6 = SelfAttention(64, 128)
         self.outc = nn.Conv2d(64, c_out, kernel_size=1)
 
-        self.image_encoder = ImageEncoder(1, c_out, self.time_dim)
+        self.image_encoder = ImageEncoder_new(1, c_out, self.time_dim)
 
     def pos_encoding(self, t, channels):
         inv_freq = 1.0 / (
@@ -1036,12 +1060,12 @@ class UNet_conditional_concat_Large(nn.Module):
         return pos_enc
     
 
-    def forward(self, x, t, y):
+    def forward(self, x, t, y, m):
         t = t.unsqueeze(-1).type(torch.float)
         t = self.pos_encoding(t, self.time_dim)
         # print(y.shape)
         if y is not None:
-            t += self.image_encoder(y)
+            t += self.image_encoder(m)
         x = torch.concat([x, y], dim=1)
         x1 = self.inc(x)
         x2 = self.down1(x1, t)
