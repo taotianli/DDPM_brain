@@ -112,7 +112,7 @@ class BrainTumorDataset_new(Dataset):
         self.data_dir = data_dir
         self.train = train
         self.device = device
-        self.subject_dirs = sorted(glob.glob(os.path.join(data_dir, '**', '256*.npz'), recursive=True))
+        self.subject_dirs = sorted(glob.glob(os.path.join(data_dir, '**', '128*.npz'), recursive=True))
         train_size = int(0.9 * len(self.subject_dirs))
         if self.train:
             self.subject_dirs = self.subject_dirs[:train_size]
