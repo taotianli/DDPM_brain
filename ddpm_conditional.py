@@ -7,11 +7,12 @@ import torch.nn as nn
 from tqdm import tqdm
 from torch import optim
 from utils import *
-from utils import _structural_similarity_index, _peak_signal_noise_ratio, _mean_squared_error
-from modules import UNet_conditional, EMA, UNet_conditional_concat, UNet_conditional_fully_concat, UNet_conditional_fully_add, UNet_conditional_concat_with_mask, UNet_conditional_concat_with_mask_v2
+from modules import UNet_conditional, EMA, UNet_conditional_concat, UNet_conditional_fully_concat, UNet_conditional_fully_add
+from modules import UNet_conditional_concat_with_mask, UNet_conditional_concat_with_mask_v2, UNet_conditional_concat_with_mask_GAM
 import logging
 from torch.utils.tensorboard import SummaryWriter
-# from inpainting.challenge_metrics_2023 import generate_metrics
+import argparse
+
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
 """
@@ -48,7 +49,7 @@ logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=log
 """
 
 class Diffusion:
-    def __init__(self, noise_steps=1000, beta_start=1e-4, beta_end=0.02, img_size=240, device="cuda"):
+    def __init__(self, noise_steps=100, beta_start=1e-4, beta_end=0.02, img_size=96, device="cuda"):
         self.noise_steps = noise_steps
         self.beta_start = beta_start
         self.beta_end = beta_end
@@ -125,10 +126,8 @@ def train(args):
     setup_logging(args.run_name)
     device = args.device
     dataloader = get_data(args)
-    test_dataloader = get_test_data(args)
     # model = UNet_conditional().to(device)
-    model = UNet_conditional_concat_with_mask_v2().to(device)
-    # model = UNet_conditional_fully_concat().to(device)
+    model = UNet_conditional_concat_with_mask_GAM().to(device)
     optimizer = optim.AdamW(model.parameters(), lr=args.lr)
     mse = nn.MSELoss()
     diffusion = Diffusion(img_size=args.image_size, device=device)
@@ -140,7 +139,7 @@ def train(args):
     for epoch in range(args.epochs):
         logging.info(f"Starting epoch {epoch}:")
         pbar = tqdm(dataloader)
-        for i, (images, cropped_images, masks) in enumerate(pbar):
+        for i, (images, cropped_images, masks, path) in enumerate(pbar):
             # print(images.shape)
             # images = images.to(device)
             labels = cropped_images
@@ -150,6 +149,8 @@ def train(args):
             images_slice = images[:,:,:,:]
             labels_slice = labels[:,:,:,:]
             masks_slice = masks[:,:,:,:]
+            # print(masks_slice.shape)
+            # masks_pixel = np.sum(masks_slice)
 
             images_slice = images_slice.to(device)
             labels_slice = labels_slice.to(device)
@@ -158,94 +159,45 @@ def train(args):
             images_slice = images_slice.to(torch.float)
             labels_slice = labels_slice.to(torch.float)
             masks_slice = masks_slice.to(torch.float)
-            # print('input shape', images_slice.shape)
-
 
             t = diffusion._timesteps(images_slice.shape[0]).to(device)
             x_t, noise = diffusion.noise_images(images_slice, t)
             predicted_noise = model(x_t, t, labels_slice, masks_slice)
-            loss = mse(noise, predicted_noise)
+            # print(masks_slice.shape, noise.shape, predicted_noise.shape)
+            noise_masked = masks_slice * noise
+            predicted_noise_masked = masks_slice * predicted_noise
+            # loss = mse(noise, predicted_noise)
+            
+            loss = mse(noise, predicted_noise) + mse(noise_masked, predicted_noise_masked)*100
+            # print(mse(noise, predicted_noise).item(), mse(noise_masked, predicted_noise_masked).item()*100, loss.item())
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             ema.step_ema(ema_model, model)
-
             pbar.set_postfix(MSE=loss.item())
             logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
-        if epoch % 5 == 0:
-            with torch.no_grad():
-                pbar_test = tqdm(test_dataloader)
-                ssim_list = []
-                psnr_list = []
-                mse_list = []
-                for i, (images, cropped_images, masks) in enumerate(pbar_test):
-                    modefied_images = cropped_images
-                    b, _, _, _ = images.shape
-                    d_images = diffusion.sample(model, n=b, labels=modefied_images, masks=masks)
-                    images_predict_slice, _, _ = inpaint_image(images[:,:,:,:], d_images[:,:,:,:], masks[:,:,:,:])
-                    img = image_preprocess_tensor(img)
-                    d_img = image_preprocess(d_img)
-
-                    img_copy = img.unsqueeze(0).unsqueeze(0)
-                    d_img_copy = d_img.unsqueeze(0).unsqueeze(0)
-                    masks = masks.cpu()
-                    mask_copy = masks.unsqueeze(0).unsqueeze(0)
-
-                    mask_copy = mask_copy.bool()
-                    images = images.cpu()
-                    d_images_new = images_predict_slice.cpu()
-                    dd = d_images[:,:,:,:].cpu()
-                    cropped_images = modefied_images.cpu()
-
-                    for index in range(args.batch_size):
-                        img = images[index, 0, :, :]
-                        d_img = d_images_new[index, 0, :, :]
-                        c_img = cropped_images[index, 0, :, :]
-                        dd_img = dd[index, 0, :, :]
-
-                        ssim = _structural_similarity_index(
-                                target=img_copy,
-                                prediction=d_img_copy,
-                                mask=mask_copy,
-                            ).item()
-                        mse = _mean_squared_error(
-                                target=img_copy,
-                                prediction=d_img_copy,
-                                squared=True,
-                            ).item()
-                        psnr = _peak_signal_noise_ratio(
-                                target=img_copy,
-                                prediction=d_img_copy,
-                            ).item()
-                        
-                        ssim_list.append(ssim)
-                        psnr_list.append(psnr)
-                        mse_list.append(mse)
-
-                # save_images(d_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
-                save_images(img, c_img, dd_img, d_img, os.path.join("results", args.run_name, f"{epoch}_ema.jpg"))
-                torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
-                torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"ema_ckpt.pt"))
-                torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim.pt"))
+        if epoch % 2 == 0:
+            torch.save(model.state_dict(), os.path.join("models", args.run_name, f"{epoch}_ckpt.pt"))
+            torch.save(ema_model.state_dict(), os.path.join("models", args.run_name, f"{epoch}_ema_ckpt.pt"))
+            torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"{epoch}_optim.pt"))
     
 
 
 def launch():
-    import argparse
     parser = argparse.ArgumentParser()
     args = parser.parse_args()
     args.run_name = "DDPM_conditional"
     args.epochs = 500
     args.batch_size = 2
-    args.image_size = 64
-    # args.dataset_path =  r"D:\ASNR-MICCAI-BraTS2023-Local-Synthesis-Challenge-Training"
-    args.dataset_path =  r"C:\Users\DELL\Desktop\DDPM\ddpm_brats\DDPM_brain\test_data"
+    args.image_size = 96
+    args.dataset_path =  r"C:\Users\DELL\Desktop\DDPM\ddpm_brats\DDPM_brain\test_data\test_data"
+    # args.dataset_path =  r"/hpc/data/home/bme/yubw/taotl/BraTS-2023_challenge/ASNR-MICCAI-BraTS2023-Local-Synthesis-Challenge-Training/"
     args.device = "cuda"
-    args.lr = 3e-4
+    args.lr = 1e-4
     args.train = True
-    args.shuffle = True
+    args.shuffle = False
     args.random_seed = 2024
     train(args)
 
